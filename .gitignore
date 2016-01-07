@@ -1,5 +1,7 @@
-*.class
+.idea
+mybeast.iml
 
+*.class
 # Mobile Tools for Java (J2ME)
 .mtj.tmp/
 
