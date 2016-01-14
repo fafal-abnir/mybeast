@@ -106,4 +106,18 @@ public class GZip4Persian {
             throw new IllegalStateException(e);
         }
     }
+
+    public static byte[] compressAndFit(String s, int maxCompressedSize) {
+        byte[] compressed = null;
+        int step = Integer.max(s.length() / 10, 1024);
+        do {
+            compressed = GZip4Persian.compress(s);
+            if (compressed.length > maxCompressedSize)
+                s = s.substring(0, s.length() - step);
+        } while (compressed.length > maxCompressedSize);
+        Preconditions.checkState(compressed.length <= maxCompressedSize,
+                "This must never happen! The BASTARD was not reduced to lower than 64ks.");
+        return compressed;
+    }
+
 }
