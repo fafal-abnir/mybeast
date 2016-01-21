@@ -60,6 +60,7 @@ public class InsertionTest {
         for (int i = 1; i <= 16; i++)
             beastConf.addMysqlShard(String.format("jdbc:mysql://mysql-%d/kv%d", i, i)
                     + "?useUnicode=true&useConfigs=maxPerformance"
+                    + "&autoReconnect=true"
                     + "&characterEncoding=UTF-8&user=root&password=chamran");
 
 
@@ -106,6 +107,7 @@ public class InsertionTest {
         hashes.saveAsHadoopFile(params.outputPath, LongWritable.class, Text.class,
                 SequenceFileOutputFormat.class, GzipCodec.class);
 
+        System.out.printf("out-dir: %s\n", params.outputPath);
         System.out.printf("rows: %,d\n", rowCount.value());
         System.out.printf("exp: %,d\n", excCount.value());
         System.out.printf("cut: %,d\n", cutCount.value());
