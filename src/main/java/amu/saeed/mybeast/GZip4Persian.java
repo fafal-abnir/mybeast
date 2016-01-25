@@ -2,7 +2,6 @@ package amu.saeed.mybeast;
 
 import com.google.common.base.Preconditions;
 import com.google.common.io.ByteStreams;
-import org.tukaani.xz.LZMA2Options;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -15,7 +14,6 @@ import java.util.zip.GZIPOutputStream;
 public class GZip4Persian {
     static final private Charset UTF8 = Charset.forName("UTF-8");
     static HashMap<Character, Character> map = new HashMap<>();
-    private static LZMA2Options lzma2Options = new LZMA2Options();
 
     // It is nasty and inefficient but let it live just for now.
     static {

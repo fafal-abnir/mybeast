@@ -11,7 +11,7 @@ public class ConsistentSharder <T> implements Iterable<T>{
     List<T> shards = new ArrayList<>();
 
     public T getShardForKey(long key) {
-        int sipHash = Hashing.sipHash24().hashString(Long.toString(key), Charset.forName("UTF8")).asInt();
+        int sipHash = Hashing.crc32().hashString(Long.toString(key), Charset.forName("UTF8")).asInt();
         int shardNum = sipHash % shards.size() >= 0 ?
                 sipHash % shards.size() :
                 sipHash % shards.size() + shards.size();

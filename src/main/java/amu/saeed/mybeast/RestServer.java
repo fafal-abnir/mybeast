@@ -27,6 +27,14 @@ public class RestServer {
             return String.format("%,d", beast.approximatedSize());
         }, new JsonTransformer());
 
+        Spark.get("/api/v1/get/:id", (request, response) -> {
+            response.type("text/json; charset=UTF-8");
+            response.status(200); // Allow anyone
+            long l = Long.parseLong(request.params(":id"));
+            byte[] x = beast.get(l);
+            return  new String(GZip4Persian.uncompress(x));
+        }, new JsonTransformer());
+
 
     }
 

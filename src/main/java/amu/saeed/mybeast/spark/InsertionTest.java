@@ -59,8 +59,7 @@ public class InsertionTest {
         final BeastConf beastConf = new BeastConf();
         for (int i = 1; i <= 16; i++)
             beastConf.addMysqlShard(String.format("jdbc:mysql://mysql-%d/kv%d", i, i)
-                    + "?useUnicode=true&useConfigs=maxPerformance"
-                    + "&autoReconnect=true"
+                    + "?useUnicode=true&useConfigs=maxPerformance" + "&autoReconnect=true"
                     + "&characterEncoding=UTF-8&user=root&password=chamran");
 
 
@@ -94,7 +93,7 @@ public class InsertionTest {
                         rows8k.add(1L);
 
                     beast.put(t._1.get(), compressed);
-                    hashList.add(new Tuple2<>(t._1(), new Text(
+                    hashList.add(new Tuple2<>(new LongWritable(t._1.get()), new Text(
                             Hashing.sha1().hashString(t._2().toString(), Charset.forName("UTF8"))
                                     .toString())));
                 } catch (SQLException e) {
