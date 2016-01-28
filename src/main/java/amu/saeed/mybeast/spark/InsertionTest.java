@@ -5,6 +5,7 @@ import amu.saeed.mybeast.GZip4Persian;
 import amu.saeed.mybeast.MyBeast;
 import com.google.common.base.Stopwatch;
 import com.google.common.hash.Hashing;
+import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.compress.GzipCodec;
@@ -22,6 +23,7 @@ import java.io.Serializable;
 import java.nio.charset.Charset;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
 
 public class InsertionTest {
     public static void main(String[] args) {
@@ -63,21 +65,22 @@ public class InsertionTest {
                     + "&characterEncoding=UTF-8&user=root&password=chamran");
 
 
-        JavaPairRDD<LongWritable, Text> inputRecords =
-                sc.sequenceFile(params.inputPath, LongWritable.class, Text.class, params.numTasks);
+        JavaPairRDD<LongWritable, BytesWritable> inputRecords =
+                sc.sequenceFile(params.inputPath, LongWritable.class, BytesWritable.class, params.numTasks);
         JavaPairRDD<LongWritable, Text> hashes = inputRecords.mapPartitionsToPair(part -> {
             ArrayList<Tuple2<LongWritable, Text>> hashList = new ArrayList<>();
             final MyBeast beast = new MyBeast(beastConf);
             part.forEachRemaining(t -> {
                 try {
                     rowCount.add(1);
-                    byte[] compressed = GZip4Persian.compress(t._2().toString());
+                    String str = new String(Arrays.copyOf(t._2().getBytes(),t._2().getLength()));
+                    byte[] compressed = GZip4Persian.compress(str);
                     if (compressed.length > MyBeast.MAX_BEAST_BLOB_SIZE) {
                         compressed =
-                                GZip4Persian.compressAndFit(t._2().toString(), MyBeast.MAX_BEAST_BLOB_SIZE);
+                                GZip4Persian.compressAndFit(str, MyBeast.MAX_BEAST_BLOB_SIZE);
                         cutCount.add(1);
                     }
-                    rawSize.add((long) t._2.getBytes().length);
+                    rawSize.add((long) t._2.getLength());
                     gzSize.add((long) compressed.length);
                     if (compressed.length < 1024 * 1)
                         rows1k.add(1L);
@@ -94,7 +97,7 @@ public class InsertionTest {
 
                     beast.put(t._1.get(), compressed);
                     hashList.add(new Tuple2<>(new LongWritable(t._1.get()), new Text(
-                            Hashing.sha1().hashString(t._2().toString(), Charset.forName("UTF8"))
+                            Hashing.sha1().hashString(str, Charset.forName("UTF8"))
                                     .toString())));
                 } catch (SQLException e) {
                     excCount.add(1);
