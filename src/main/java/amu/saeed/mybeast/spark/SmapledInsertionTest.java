@@ -3,6 +3,7 @@ package amu.saeed.mybeast.spark;
 import amu.saeed.mybeast.BeastConf;
 import amu.saeed.mybeast.GZip4Persian;
 import amu.saeed.mybeast.MyBeast;
+import amu.saeed.mybeast.MysqlStore;
 import com.google.common.base.Stopwatch;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
@@ -36,7 +37,6 @@ public class SmapledInsertionTest {
         SparkConf conf = new SparkConf().setAppName(appName);
         SparkConfigurator.generalConfig(conf);
 
-
         Stopwatch stopwatch = Stopwatch.createStarted();
         JavaSparkContext sc = new JavaSparkContext(conf);
         conf.setMaster("spark://spark-master:7077");
@@ -47,31 +47,31 @@ public class SmapledInsertionTest {
         Accumulator<Long> rawSize = LongAccumolator.create();
         Accumulator<Long> gzSize = LongAccumolator.create();
 
-
         final BeastConf beastConf = new BeastConf();
         for (int i = 1; i <= 16; i++)
-            beastConf.addMysqlShard(String.format("jdbc:mysql://mysql-%d/kv%d", i, i)
-                    + "?useUnicode=true&useConfigs=maxPerformance"
-                    + "&characterEncoding=UTF-8&user=root&password=chamran");
+            beastConf.addMysqlShard(String.format("jdbc:mysql://mysql-%d/kv%d", i, i) +
+                                            "?useUnicode=true&useConfigs=maxPerformance" +
+                                            "&characterEncoding=UTF-8&user=root"
+                                            + "&password=chamran");
 
-
-        JavaPairRDD<LongWritable, Text> inputRecords =
-                sc.sequenceFile(params.inputPath, LongWritable.class, Text.class, params.numTasks);
+        JavaPairRDD<LongWritable, Text> inputRecords = sc.sequenceFile(params.inputPath,
+                                                                       LongWritable.class,
+                                                                       Text.class, params.numTasks);
         JavaPairRDD<Long, Integer> sizes = inputRecords.flatMapToPair(t -> {
             List<Tuple2<Long, Integer>> list = new ArrayList<>();
-            int len = GZip4Persian.compressAndFit(t._2().toString(),MyBeast.MAX_BEAST_BLOB_SIZE).length;
+            int len = GZip4Persian.compressAndFit(t._2().toString(),
+                                                  MysqlStore.MAX_VALUE_LEN).length;
             for (int i = 0; i < params.repFactor; i++)
                 list.add(new Tuple2<>(t._1.get() + i, len));
             return list;
         });
 
-
         sizes = sizes.repartition(params.numTasks).cache();
 
-        sizes.map(t -> String.format("%d\t%d", t._1, t._2))
-                .saveAsTextFile(params.outputPath, GzipCodec.class);
+        sizes.map(t -> String.format("%d\t%d", t._1, t._2)).saveAsTextFile(params.outputPath,
+                                                                           GzipCodec.class);
 
-        sizes.mapPartitions(part->{
+        sizes.mapPartitions(part -> {
             final MyBeast beast = new MyBeast(beastConf);
             part.forEachRemaining(t -> {
                 try {
@@ -103,7 +103,6 @@ public class SmapledInsertionTest {
         System.out.println("Time: " + stopwatch);
 
     }
-
 
     private static class Params implements Serializable {
         @Option(name = "-f", usage = "multiply factor", required = true)

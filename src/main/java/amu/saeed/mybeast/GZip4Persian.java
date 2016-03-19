@@ -59,10 +59,8 @@ public class GZip4Persian {
         StringBuilder translated = new StringBuilder(s.length());
         for (int i = 0; i < s.length(); i++) {
             Character ch = map.get(s.charAt(i));
-            if (ch != null)
-                translated.append(ch);
-            else
-                translated.append(s.charAt(i));
+            if (ch != null) translated.append(ch);
+            else translated.append(s.charAt(i));
         }
         return translated.toString();
     }
@@ -72,10 +70,8 @@ public class GZip4Persian {
         StringBuilder translated = new StringBuilder(s.length());
         for (int i = 0; i < s.length(); i++) {
             Character ch = map.get(s.charAt(i));
-            if (ch != null)
-                translated.append(ch);
-            else
-                translated.append(s.charAt(i));
+            if (ch != null) translated.append(ch);
+            else translated.append(s.charAt(i));
         }
         return translated.toString();
     }
@@ -96,7 +92,8 @@ public class GZip4Persian {
     public static String uncompress(byte[] bytes) {
         Preconditions.checkNotNull(bytes);
         try {
-            ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream(bytes.length * 4);
+            ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream(
+                    bytes.length * 4);
             GZIPInputStream gzipInputStream = new GZIPInputStream(new ByteArrayInputStream(bytes));
             ByteStreams.copy(gzipInputStream, byteArrayOutputStream);
             return deTransform(new String(byteArrayOutputStream.toByteArray(), UTF8));
@@ -110,11 +107,11 @@ public class GZip4Persian {
         int step = Integer.max(s.length() / 10, 1024);
         do {
             compressed = GZip4Persian.compress(s);
-            if (compressed.length > maxCompressedSize)
-                s = s.substring(0, s.length() - step);
+            if (compressed.length > maxCompressedSize) s = s.substring(0, s.length() - step);
         } while (compressed.length > maxCompressedSize);
         Preconditions.checkState(compressed.length <= maxCompressedSize,
-                "This must never happen! The BASTARD was not reduced to lower than 64ks.");
+                                 "This must never happen! The BASTARD was not reduced to lower "
+                                         + "than 64ks.");
         return compressed;
     }
 

@@ -7,14 +7,14 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
-public class ConsistentSharder <T> implements Iterable<T>{
+public class ConsistentSharder <T> implements Iterable<T> {
     List<T> shards = new ArrayList<>();
 
     public T getShardForKey(long key) {
-        int sipHash = Hashing.crc32().hashString(Long.toString(key), Charset.forName("UTF8")).asInt();
-        int shardNum = sipHash % shards.size() >= 0 ?
-                sipHash % shards.size() :
-                sipHash % shards.size() + shards.size();
+        int crc = Hashing.crc32().hashString(Long.toString(key), Charset.forName("UTF8")).asInt();
+        int shardNum = crc % shards.size() >= 0 ?
+                       crc % shards.size() :
+                       crc % shards.size() + shards.size();
         return shards.get(shardNum);
     }
 

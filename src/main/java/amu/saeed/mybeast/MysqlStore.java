@@ -5,29 +5,57 @@ import com.google.common.base.Preconditions;
 import java.sql.*;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
+/**
+ * A key-value store warpper around MySQL. The key is always a 64-bit long and
+ * the value is a byte array which its length must be less than
+ * {@link MysqlStore#MAX_VALUE_LEN}. <br>
+ * {@link MysqlStore} provides three basic methods:
+ * <ul>
+ * <li>put</li>
+ * <li>get</li>
+ * <li>delete</li>
+ * </ul>
+ */
 public class MysqlStore {
+    public static final int MAX_VALUE_LEN = 65500;
     private final Object connectionLock = new Object();
     private Connection connections = null;
     private CallableStatement putStatements = null;
     private CallableStatement getStatements = null;
     private CallableStatement delStatements = null;
 
+    /**
+     * Builds a MysqlStore given a JDBC connection string.
+     *
+     * @param conString the JDBC connection string.
+     * @throws SQLException if it cannot connect.
+     */
     public MysqlStore(String conString) throws SQLException {
         try {
             Class.forName("com.mysql.jdbc.Driver");
         } catch (ClassNotFoundException e) {
             e.printStackTrace();
         }
-
         connections = DriverManager.getConnection(conString);
         putStatements = connections.prepareCall("{CALL kvput(?, ?)}");
         getStatements = connections.prepareCall("{CALL kvget(?)}");
         delStatements = connections.prepareCall("{CALL kvdel(?)}");
     }
 
-    public synchronized void put(long key, byte[] val) throws SQLException {
-        Preconditions.checkArgument(val.length <= 65535, "The length of value must be smaller than 65535");
+    /**
+     * Inserts a key-val to mysql.
+     *
+     * @param key
+     * @param val
+     * @throws SQLException             if it cannot insert to mysql.
+     * @throws IllegalArgumentException if the length of value is larger than
+     *                                  {@link MysqlStore#MAX_VALUE_LEN}
+     */
+    public void put(long key, byte[] val) throws SQLException {
+        Preconditions.checkArgument(val.length <= MAX_VALUE_LEN,
+                                    "The length of value must be smaller than " + MAX_VALUE_LEN);
         synchronized (connectionLock) {
             putStatements.setLong(1, key);
             putStatements.setBytes(2, val);
@@ -35,7 +63,14 @@ public class MysqlStore {
         }
     }
 
-    public byte[] get(long key) throws SQLException {
+    /**
+     * Retrieves the value given a key.
+     *
+     * @param key
+     * @return an Optional byte array; empty if the key does not exist.
+     * @throws SQLException
+     */
+    public Optional<byte[]> get(long key) throws SQLException {
         synchronized (connectionLock) {
             getStatements.setLong(1, key);
             boolean hasResult = getStatements.execute();
@@ -44,20 +79,33 @@ public class MysqlStore {
                 if (result.next()) {
                     long l = result.getLong(1);
                     byte[] val = result.getBytes(2);
-                    return val;
+                    return Optional.of(val);
                 }
             }
         }
-        return null;
+        return Optional.empty();
     }
 
-    public void delete(long key) throws SQLException {
+    /**
+     * Deletes a key-val given the key.
+     *
+     * @param key
+     * @return true if the key was deleted; otherwise false i.e. the key was
+     * not present.
+     * @throws SQLException
+     */
+    public boolean delete(long key) throws SQLException {
         synchronized (connectionLock) {
             delStatements.setLong(1, key);
-            delStatements.executeUpdate();
+            return delStatements.executeUpdate() > 0;
         }
     }
 
+    /**
+     * Clears all of the data from database.
+     *
+     * @throws SQLException
+     */
     public void purge() throws SQLException {
         synchronized (connectionLock) {
             connections.prepareCall("{ CALL trunc_all() }").execute();

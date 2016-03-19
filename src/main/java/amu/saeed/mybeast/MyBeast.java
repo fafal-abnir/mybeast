@@ -1,22 +1,19 @@
 package amu.saeed.mybeast;
 
 import com.google.common.base.Preconditions;
-import com.google.common.hash.Hashing;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.nio.charset.Charset;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Optional;
 
 public class MyBeast {
-    public static final int MAX_BEAST_BLOB_SIZE = 65_535;
     private static final Logger logger = LoggerFactory.getLogger(MyBeast.class);
     ConsistentSharder<MysqlStore> mysqlShards = new ConsistentSharder<>();
 
     public MyBeast(BeastConf conf) {
-        Preconditions.checkArgument(conf.getMysqlConnections().size() > 0, "Mysql shards cannot be zero!");
+        Preconditions.checkArgument(conf.getMysqlConnections().size() > 0,
+                                    "The number of shards of Mysql cannot be " + "zero!");
         try {
             for (String conStr : conf.getMysqlConnections())
                 mysqlShards.addShard(new MysqlStore(conStr));
@@ -31,14 +28,14 @@ public class MyBeast {
         mysqlStore.put(key, val);
     }
 
-    public byte[] get(long key) throws SQLException {
+    public Optional<byte[]> get(long key) throws SQLException {
         MysqlStore mysqlStore = mysqlShards.getShardForKey(key);
         return mysqlStore.get(key);
     }
 
-    public void delete(long key) throws SQLException {
+    public boolean delete(long key) throws SQLException {
         MysqlStore mysqlStore = mysqlShards.getShardForKey(key);
-        mysqlStore.delete(key);
+        return mysqlStore.delete(key);
     }
 
     public void close() throws SQLException {

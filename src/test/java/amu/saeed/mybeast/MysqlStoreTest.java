@@ -43,7 +43,7 @@ public class MysqlStoreTest {
             mysqlStore.put(entry.getKey(), entry.getValue());
         mysqlStore.commit();
         assertMapsEqual(map, mysqlStore.getAll());
-        Assert.assertArrayEquals(mysqlStore.get(1L), map.get(1L));
+        Assert.assertArrayEquals(mysqlStore.get(1L).get(), map.get(1L));
 
         // check absent key
         Assert.assertNull(mysqlStore.get(20L));

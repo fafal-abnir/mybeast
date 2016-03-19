@@ -16,7 +16,8 @@ public class SparkConfigurator {
         conf.set("spark.shuffle.consolidateFiles", "true");
         conf.set("spark.akka.threads", "4");
         conf.set("spark.hadoop.mapred.output.compress", "true");
-        conf.set("spark.hadoop.mapred.output.compression.codec", "org.apache.hadoop.io.compress.DefaultCodec");
+        conf.set("spark.hadoop.mapred.output.compression.codec",
+                 "org.apache.hadoop.io.compress.DefaultCodec");
         conf.set("spark.hadoop.mapred.output.compression.type", "BLOCK");
 
     }

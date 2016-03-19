@@ -3,6 +3,7 @@ package amu.saeed.mybeast.spark;
 import amu.saeed.mybeast.BeastConf;
 import amu.saeed.mybeast.GZip4Persian;
 import amu.saeed.mybeast.MyBeast;
+import amu.saeed.mybeast.MysqlStore;
 import com.google.common.base.Stopwatch;
 import com.google.common.hash.Hashing;
 import org.apache.hadoop.io.BytesWritable;
@@ -40,7 +41,6 @@ public class InsertionTest {
         SparkConf conf = new SparkConf().setAppName(appName);
         SparkConfigurator.generalConfig(conf);
 
-
         Stopwatch stopwatch = Stopwatch.createStarted();
         JavaSparkContext sc = new JavaSparkContext(conf);
         //conf.setMaster("spark://spark-master:7077");
@@ -57,48 +57,42 @@ public class InsertionTest {
         Accumulator<Long> rows6k = LongAccumolator.create();
         Accumulator<Long> rows8k = LongAccumolator.create();
 
-
         final BeastConf beastConf = new BeastConf();
-        for (int i = 1; i <= 16; i++)
-            beastConf.addMysqlShard(String.format("jdbc:mysql://mysql-%d/kv%d", i, i)
-                    + "?useUnicode=true&useConfigs=maxPerformance" + "&autoReconnect=true"
-                    + "&characterEncoding=UTF-8&user=root&password=chamran");
+        for (int i = 1; i <= 1; i++)
+            beastConf.addMysqlShard(String.format("jdbc:mysql://mysql-%d/kv%d", i, i) +
+                                            "?useUnicode=true&useConfigs=maxPerformance" +
+                                            "&autoReconnect=true&characterEncoding=UTF-8"
+                                            + "&user=root&password=chamran");
 
+        JavaPairRDD<LongWritable, BytesWritable> inputRecords = sc.sequenceFile(params.inputPath,
+                                                                                LongWritable.class,
+                                                                                BytesWritable.class,
+                                                                                params.numTasks);
 
-        JavaPairRDD<LongWritable, BytesWritable> inputRecords =
-                sc.sequenceFile(params.inputPath, LongWritable.class, BytesWritable.class, params.numTasks);
         JavaPairRDD<LongWritable, Text> hashes = inputRecords.mapPartitionsToPair(part -> {
             ArrayList<Tuple2<LongWritable, Text>> hashList = new ArrayList<>();
             final MyBeast beast = new MyBeast(beastConf);
             part.forEachRemaining(t -> {
                 try {
                     rowCount.add(1);
-                    String str = new String(Arrays.copyOf(t._2().getBytes(),t._2().getLength()));
+                    String str = new String(Arrays.copyOf(t._2().getBytes(), t._2().getLength()));
                     byte[] compressed = GZip4Persian.compress(str);
-                    if (compressed.length > MyBeast.MAX_BEAST_BLOB_SIZE) {
-                        compressed =
-                                GZip4Persian.compressAndFit(str, MyBeast.MAX_BEAST_BLOB_SIZE);
+                    if (compressed.length > MysqlStore.MAX_VALUE_LEN) {
+                        compressed = GZip4Persian.compressAndFit(str, MysqlStore.MAX_VALUE_LEN);
                         cutCount.add(1);
                     }
                     rawSize.add((long) t._2.getLength());
                     gzSize.add((long) compressed.length);
-                    if (compressed.length < 1024 * 1)
-                        rows1k.add(1L);
-                    else if (compressed.length < 1024 * 2)
-                        rows2k.add(1L);
-                    else if (compressed.length < 1024 * 3)
-                        rows3k.add(1L);
-                    else if (compressed.length < 1024 * 4)
-                        rows4k.add(1L);
-                    else if (compressed.length < 1024 * 6)
-                        rows6k.add(1L);
-                    else if (compressed.length < 1024 * 8)
-                        rows8k.add(1L);
+                    if (compressed.length < 1024 * 1) rows1k.add(1L);
+                    else if (compressed.length < 1024 * 2) rows2k.add(1L);
+                    else if (compressed.length < 1024 * 3) rows3k.add(1L);
+                    else if (compressed.length < 1024 * 4) rows4k.add(1L);
+                    else if (compressed.length < 1024 * 6) rows6k.add(1L);
+                    else if (compressed.length < 1024 * 8) rows8k.add(1L);
 
                     beast.put(t._1.get(), compressed);
                     hashList.add(new Tuple2<>(new LongWritable(t._1.get()), new Text(
-                            Hashing.sha1().hashString(str, Charset.forName("UTF8"))
-                                    .toString())));
+                            Hashing.sha1().hashString(str, Charset.forName("UTF8")).toString())));
                 } catch (SQLException e) {
                     excCount.add(1);
                 }
@@ -107,7 +101,7 @@ public class InsertionTest {
         });
 
         hashes.saveAsHadoopFile(params.outputPath, LongWritable.class, Text.class,
-                SequenceFileOutputFormat.class, GzipCodec.class);
+                                SequenceFileOutputFormat.class, GzipCodec.class);
 
         System.out.printf("out-dir: %s\n", params.outputPath);
         System.out.printf("rows: %,d\n", rowCount.value());
@@ -124,7 +118,6 @@ public class InsertionTest {
         System.out.println("Time: " + stopwatch);
 
     }
-
 
     private static class Params implements Serializable {
         @Option(name = "-t", usage = "number of tasks to launch", required = true)
