@@ -27,6 +27,8 @@ public class ConsistentSharder <T> implements Iterable<T> {
         addShard(shard, 1);
     }
 
+    public int numShards() { return shards.size(); }
+
     @Override
     public Iterator<T> iterator() {
         return shards.iterator();

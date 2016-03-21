@@ -15,7 +15,7 @@ public class RestServer {
                                             "?useUnicode=true&useConfigs=maxPerformance" +
                                             "&characterEncoding=UTF-8&user=root&password=chamran");
 
-        final MyBeast beast = new MyBeast(beastConf);
+        final MyBeastClient beast = new MyBeastClient(beastConf);
 
         Spark.port(9090);
         Spark.threadPool(200);

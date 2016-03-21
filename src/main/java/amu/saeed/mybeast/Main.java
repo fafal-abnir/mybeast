@@ -10,7 +10,7 @@ public class Main {
                                        "?useUnicode=true&useConfigs=maxPerformance" +
                                        "&characterEncoding=UTF-8&user=root&password=chamran");
 
-        MyBeast beast = new MyBeast(conf);
+        MyBeastClient beast = new MyBeastClient(conf);
         while (true) {
             System.out.printf("%,d\n", beast.size());
             Thread.sleep(1000);

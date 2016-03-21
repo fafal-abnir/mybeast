@@ -2,7 +2,7 @@ package amu.saeed.mybeast.spark;
 
 import amu.saeed.mybeast.BeastConf;
 import amu.saeed.mybeast.GZip4Persian;
-import amu.saeed.mybeast.MyBeast;
+import amu.saeed.mybeast.MyBeastClient;
 import amu.saeed.mybeast.MysqlStore;
 import com.google.common.base.Stopwatch;
 import com.google.common.hash.Hashing;
@@ -71,7 +71,7 @@ public class InsertionTest {
 
         JavaPairRDD<LongWritable, Text> hashes = inputRecords.mapPartitionsToPair(part -> {
             ArrayList<Tuple2<LongWritable, Text>> hashList = new ArrayList<>();
-            final MyBeast beast = new MyBeast(beastConf);
+            final MyBeastClient beast = new MyBeastClient(beastConf);
             part.forEachRemaining(t -> {
                 try {
                     rowCount.add(1);
