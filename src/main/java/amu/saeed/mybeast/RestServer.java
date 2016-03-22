@@ -5,10 +5,11 @@ import com.google.gson.GsonBuilder;
 import spark.ResponseTransformer;
 import spark.Spark;
 
+import java.sql.SQLException;
 import java.util.Optional;
 
 public class RestServer {
-    public static void main(String[] args) {
+    public static void main(String[] args) throws SQLException {
         final BeastConf beastConf = new BeastConf();
         for (int i = 1; i <= 16; i++)
             beastConf.addMysqlShard(String.format("jdbc:mysql://mysql-%d/kv%d", i, i) +

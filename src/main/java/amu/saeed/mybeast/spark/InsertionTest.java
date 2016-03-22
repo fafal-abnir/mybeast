@@ -58,7 +58,7 @@ public class InsertionTest {
         Accumulator<Long> rows8k = LongAccumolator.create();
 
         final BeastConf beastConf = new BeastConf();
-        for (int i = 1; i <= 1; i++)
+        for (int i = 1; i <= 16; i++)
             beastConf.addMysqlShard(String.format("jdbc:mysql://mysql-%d/kv%d", i, i) +
                                             "?useUnicode=true&useConfigs=maxPerformance" +
                                             "&autoReconnect=true&characterEncoding=UTF-8"

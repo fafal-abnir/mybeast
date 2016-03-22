@@ -6,10 +6,11 @@ import org.slf4j.LoggerFactory;
 
 import java.sql.SQLException;
 import java.util.*;
+import java.util.stream.Collectors;
 
 public class MyBeastClient {
     private static final Logger logger = LoggerFactory.getLogger(MyBeastClient.class);
-    ConsistentSharder<MysqlStore> mysqlShards = new ConsistentSharder<>();
+    private ConsistentSharder<MysqlStore> mysqlShards = new ConsistentSharder<>();
 
     public MyBeastClient(BeastConf conf) throws SQLException {
         Preconditions.checkArgument(conf.getMysqlConnections().size() > 0,
@@ -41,29 +42,31 @@ public class MyBeastClient {
             shardsToQuery.get(destShard).add(key);
         }
 
-        final List<MysqlStore> shardsList = mysqlShards.shards;
-        Thread[] queryThreads = new Thread[mysqlShards.numShards()];
-        for (int i = 0; i < queryThreads.length; i++) {
-            final int idx = i;
-            queryThreads[i] = new Thread(() -> {
-                MysqlStore shard = shardsList.get(idx);
-                for (long key : shardsToQuery.get(shard)) {
-                    try {
-                        Optional<byte[]> val = shard.get(key);
-                        if (val.isPresent())
-                            resultSet.put(key, val.get());
-                    } catch (SQLException e) {
-                        logger.error("Cannot get key-> {} from shard-> {}", key, shard);
-                        logger.error("The SQL exception:", e);
-                    }
+        final List<Runnable> tasks = shardsToQuery.entrySet().stream().filter(
+                t -> t.getValue().size() > 0).map(t -> (Runnable) () -> {
+            MysqlStore shard = t.getKey();
+            for (long key : shardsToQuery.get(shard)) {
+                try {
+                    Optional<byte[]> val = shard.get(key);
+                    if (val.isPresent())
+                        resultSet.put(key, val.get());
+                } catch (SQLException e) {
+                    logger.error("Cannot get key-> {} from shard-> {}", key, shard);
+                    logger.error("The SQL exception:", e);
                 }
+            }
+        }).collect(Collectors.toList());
 
-            });
+        Thread[] queryThreads = new Thread[tasks.size()];
+        for (int i = 0; i < queryThreads.length; i++) {
+            queryThreads[i] = new Thread(tasks.get(i));
             queryThreads[i].start();
         }
 
-        for (Thread queryThread : queryThreads)
+        for (Thread queryThread : queryThreads) {
             queryThread.join();
+            logger.info("Thread: {} finished", queryThread.getName());
+        }
 
         return resultSet;
     }
