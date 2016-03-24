@@ -6,7 +6,7 @@ import java.sql.SQLException;
 import java.util.Map;
 
 public class Sample {
-    public static void main(String[] args) throws SQLException, InterruptedException {
+    public static void main(String[] args) throws InterruptedException {
         final BeastConf beastConf = new BeastConf();
         for (int i = 1; i <= 16; i++)
             beastConf.addMysqlShard(String.format("jdbc:mysql://mysql-%d/kv%d", i, i) +
@@ -23,7 +23,11 @@ public class Sample {
                                   219854334871525329L, 219845969292692950L, 219868993645550452L,
                                   219854451350902168L, 219818011085944777L, 219868187858387716L,
                                   219833948693719320L, 219843281657143997L};
-        beast.multiGet(keys);
+        try {
+            beast.multiGet(keys);
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
 
         keys = new long[] {244236721246914296L, 244256545575161799L, 244283721594682799L,
                            244267561200569511L, 244183445100924941L, 244261357185261158L,
@@ -36,13 +40,13 @@ public class Sample {
         while (true) {
             try {
                 Stopwatch stopwatch = Stopwatch.createStarted();
-                Map<Long, byte[]> map = beast.multiGet(keys);
-                System.out.println(stopwatch);
+                MyBeastClient.MultiGetResult res = beast.multiGet(keys);
+                System.out.println(stopwatch + "->" + res);
                 stopwatch.reset().start();
                 for (long key : keys)
                     beast.get(key);
                 System.out.println(stopwatch);
-                Thread.sleep(1000);
+                Thread.sleep(100);
             } catch (SQLException e) {
                 e.printStackTrace();
             }

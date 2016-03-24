@@ -1,25 +1,35 @@
 package amu.saeed.mybeast;
 
 import com.google.common.base.Preconditions;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.sql.SQLException;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.stream.Collectors;
 
 public class MyBeastClient {
-    private static final Logger logger = LoggerFactory.getLogger(MyBeastClient.class);
+    private static final int MULTI_GET_TIMEOUT_MILLIS = 100;
     private ConsistentSharder<MysqlStore> mysqlShards = new ConsistentSharder<>();
-    private ExecutorService threadPool;
+    private Map<MysqlStore, ExecutorService> queryThreads;
 
-    public MyBeastClient(BeastConf conf) throws SQLException {
+    public MyBeastClient(BeastConf conf) {
         Preconditions.checkArgument(conf.getMysqlConnections().size() > 0,
                                     "The number of shards of Mysql cannot be zero!");
+
+        int numDummies = 0;
         for (String conStr : conf.getMysqlConnections())
-            mysqlShards.addShard(new MysqlStore(conStr));
-        threadPool = Executors.newFixedThreadPool(mysqlShards.numShards());
+            try {
+                mysqlShards.addShard(new MysqlStore(conStr));
+            } catch (SQLException e) {
+                mysqlShards.addShard(MysqlStore.createDummy());
+                numDummies++;
+            }
+
+        Preconditions.checkState(numDummies < mysqlShards.numShards(),
+                                 "All of the shards got error during connection.");
+
+        queryThreads = new HashMap<>(mysqlShards.numShards());
+        for (MysqlStore mysqlShard : mysqlShards)
+            queryThreads.put(mysqlShard, Executors.newSingleThreadScheduledExecutor());
     }
 
     public void put(long key, byte[] val) throws SQLException {
@@ -32,86 +42,47 @@ public class MyBeastClient {
         return mysqlStore.get(key);
     }
 
-    public Map<Long, byte[]> multiGet(long... keys) throws InterruptedException, SQLException {
-        // This is the final result to return
-        Map<Long, byte[]> resultSet = new HashMap<>();
+    public synchronized MultiGetResult multiGet(long... keys) throws InterruptedException {
+        final MultiGetResult result = new MultiGetResult();
 
-        Map<Long, Callable<Optional<byte[]>>> callables = new HashMap<>();
+        // build a Runnable per key which will be executed asyncly
+        Map<Long, Runnable> querieTasks = new HashMap<>();
         for (long key : keys)
-            callables.put(key, () -> mysqlShards.getShardForKey(key).get(key));
-
-        List<Future<Optional<byte[]>>> futures = threadPool.invokeAll(callables.values(), 500,
-                                                                      TimeUnit.MILLISECONDS);
-        for (Future<Optional<byte[]>> future : futures) {
-            try {
-                future.get();
-            } catch (ExecutionException e) {
-                e.printStackTrace();
-            }
-        }
-
-        // Here there is a simple logic:
-        //    We group the keys using their corresponding shards and query all shards concurrently
-        final Map<MysqlStore, List<Long>> shardsToQuery = new HashMap<>();
-        for (long key : keys) {
-            MysqlStore destShard = mysqlShards.getShardForKey(key);
-            if (!shardsToQuery.containsKey(destShard))
-                shardsToQuery.put(destShard, new ArrayList<>());
-            shardsToQuery.get(destShard).add(key);
-        }
-
-        final Map<Long, SQLException> exceptions = new HashMap<>();
-        final List<Runnable> tasks = shardsToQuery.entrySet().stream().filter(
-                t -> t.getValue().size() > 0).map(t -> (Runnable) () -> {
-            MysqlStore shard = t.getKey();
-            for (long key : shardsToQuery.get(shard)) {
+            querieTasks.put(key, () -> {
                 try {
-                    Optional<byte[]> val = shard.get(key);
+                    Optional<byte[]> val = mysqlShards.getShardForKey(key).get(key);
                     if (val.isPresent())
-                        resultSet.put(key, val.get());
+                        result.presents.put(key, val.get());
+                    else
+                        result.absents.add(key);
                 } catch (SQLException e) {
-                    exceptions.put(key, e);
+                    result.exceptions.put(key, e);
                 }
-            }
-        }).collect(Collectors.toList());
+            });
 
-        List<Callable<Map<Long, byte[]>>> tt = shardsToQuery.entrySet().stream().filter(
-                t -> t.getValue().size() > 0).map(t -> (Callable<Map<Long, byte[]>>) () -> {
-            Map<Long, byte[]> map = new HashMap<>();
-            MysqlStore shard = t.getKey();
-            for (long key : shardsToQuery.get(shard)) {
-                try {
-                    Optional<byte[]> val = shard.get(key);
-                    if (val.isPresent())
-                        map.put(key, val.get());
-                } catch (SQLException e) {
-                    exceptions.put(key, e);
-                }
-            }
-            return map;
-        }).collect(Collectors.toList());
+        // submit queries to corresponding executor related its shard
+        Map<Long, Future> futures = new HashMap<>();
+        for (Map.Entry<Long, Runnable> entry : querieTasks.entrySet()) {
+            ExecutorService executor = queryThreads.get(mysqlShards.getShardForKey(entry.getKey()));
+            futures.put(entry.getKey(), executor.submit(entry.getValue()));
+        }
 
-        List<Future<Map<Long, byte[]>>> res = threadPool.invokeAll(tt);
-        for (Future<Map<Long, byte[]>> resultFromShard : res) {
+        //
+        for (Map.Entry<Long, Future> entry : futures.entrySet()) {
             try {
-                resultSet.putAll(resultFromShard.get());
+                entry.getValue().get(MULTI_GET_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
             } catch (ExecutionException e) {
+                throw new IllegalStateException("This block shall not reachhere: The runnable for "
+                                                        + "queries shall never throw exceptions.");
+            } catch (TimeoutException e) {
+                entry.getValue().cancel(true);
+                result.timeouts.add(entry.getKey());
             }
         }
 
-        Thread[] queryThreads = new Thread[tasks.size()];
-        for (int i = 0; i < queryThreads.length; i++) {
-            queryThreads[i] = new Thread(tasks.get(i));
-            queryThreads[i].start();
-        }
-
-        for (Thread queryThread : queryThreads)
-            queryThread.join();
-
-        if (exceptions.size() > 0)
-            throw exceptions.values().iterator().next();
-
-        return resultSet;
+        if (result.totalResults() != keys.length)
+            throw new IllegalStateException();
+        return result;
     }
 
     public boolean delete(long key) throws SQLException {
@@ -143,4 +114,40 @@ public class MyBeastClient {
         return sum;
     }
 
+    public class MultiGetResult {
+        final Map<Long, byte[]> presents = Collections.synchronizedMap(new HashMap<>());
+        final Map<Long, Exception> exceptions = Collections.synchronizedMap(new HashMap<>());
+        final Set<Long> timeouts = Collections.synchronizedSet(new HashSet<>());
+        final Set<Long> absents = Collections.synchronizedSet(new HashSet<>());
+
+        public Map<Long, Exception> getExceptions() {
+            return exceptions;
+        }
+
+        public Map<Long, byte[]> getPresents() {
+            return presents;
+        }
+
+        public Set<Long> getTimeouts() {
+            return timeouts;
+        }
+
+        public Set<Long> getAbsents() {
+            return absents;
+        }
+
+        public int totalResults() {
+            return presents.size() + absents.size() + exceptions.size() + timeouts.size();
+        }
+
+        @Override
+        public String toString() {
+            return "MultiGetResult{" +
+                    "presents=" + presents.size() +
+                    ", absents=" + absents.size() +
+                    ", exceptions=" + exceptions.size() +
+                    ", timeouts=" + timeouts.size() +
+                    '}';
+        }
+    }
 }

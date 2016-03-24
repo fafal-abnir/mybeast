@@ -19,12 +19,14 @@ import java.util.Optional;
  * </ul>
  */
 public class MysqlStore {
+    public static final int QUERY_TIMEOUT_SECONDS = 1;
     public static final int MAX_VALUE_LEN = 65500;
     private final Object connectionLock = new Object();
+    private final boolean isDummy;
     private Connection connections = null;
-    private CallableStatement putStatements = null;
-    private CallableStatement getStatements = null;
-    private CallableStatement delStatements = null;
+    private CallableStatement putStatement = null;
+    private CallableStatement getStatement = null;
+    private CallableStatement delStatement = null;
 
     /**
      * Builds a MysqlStore given a JDBC connection string.
@@ -39,9 +41,21 @@ public class MysqlStore {
             e.printStackTrace();
         }
         connections = DriverManager.getConnection(conString);
-        putStatements = connections.prepareCall("{CALL kvput(?, ?)}");
-        getStatements = connections.prepareCall("{CALL kvget(?)}");
-        delStatements = connections.prepareCall("{CALL kvdel(?)}");
+        putStatement = connections.prepareCall("{CALL kvput(?, ?)}");
+        putStatement.setQueryTimeout(1);
+        getStatement = connections.prepareCall("{CALL kvget(?)}");
+        getStatement.setQueryTimeout(1);
+        delStatement = connections.prepareCall("{CALL kvdel(?)}");
+        delStatement.setQueryTimeout(1);
+        isDummy = false;
+    }
+
+    private MysqlStore() {
+        isDummy = true;
+    }
+
+    public static MysqlStore createDummy() {
+        return new MysqlStore();
     }
 
     /**
@@ -56,10 +70,13 @@ public class MysqlStore {
     public void put(long key, byte[] val) throws SQLException {
         Preconditions.checkArgument(val.length <= MAX_VALUE_LEN,
                                     "The length of value must be smaller than " + MAX_VALUE_LEN);
+        if (isDummy)
+            throw new SQLException("The shard is in dummy mode.");
+
         synchronized (connectionLock) {
-            putStatements.setLong(1, key);
-            putStatements.setBytes(2, val);
-            putStatements.executeUpdate();
+            putStatement.setLong(1, key);
+            putStatement.setBytes(2, val);
+            putStatement.executeUpdate();
         }
     }
 
@@ -71,11 +88,14 @@ public class MysqlStore {
      * @throws SQLException
      */
     public Optional<byte[]> get(long key) throws SQLException {
+        if (isDummy)
+            throw new SQLException("The shard is in dummy mode.");
+
         synchronized (connectionLock) {
-            getStatements.setLong(1, key);
-            boolean hasResult = getStatements.execute();
+            getStatement.setLong(1, key);
+            boolean hasResult = getStatement.execute();
             if (hasResult) {
-                ResultSet result = getStatements.getResultSet();
+                ResultSet result = getStatement.getResultSet();
                 if (result.next()) {
                     long l = result.getLong(1);
                     byte[] val = result.getBytes(2);
@@ -95,9 +115,12 @@ public class MysqlStore {
      * @throws SQLException
      */
     public boolean delete(long key) throws SQLException {
+        if (isDummy)
+            throw new SQLException("The shard is in dummy mode.");
+
         synchronized (connectionLock) {
-            delStatements.setLong(1, key);
-            return delStatements.executeUpdate() > 0;
+            delStatement.setLong(1, key);
+            return delStatement.executeUpdate() > 0;
         }
     }
 
@@ -107,16 +130,25 @@ public class MysqlStore {
      * @throws SQLException
      */
     public void purge() throws SQLException {
+        if (isDummy)
+            throw new SQLException("The shard is in dummy mode.");
+
         synchronized (connectionLock) {
             connections.prepareCall("{ CALL trunc_all() }").execute();
         }
     }
 
     public void close() throws SQLException {
+        if (isDummy)
+            throw new SQLException("The shard is in dummy mode.");
+
         connections.close();
     }
 
     public Map<Long, byte[]> getAll() throws SQLException {
+        if (isDummy)
+            throw new SQLException("The shard is in dummy mode.");
+
         Map<Long, byte[]> map = new HashMap<>();
         synchronized (connectionLock) {
             CallableStatement stm = connections.prepareCall("{ CALL get_all() }");
@@ -134,6 +166,9 @@ public class MysqlStore {
     }
 
     public void commit() throws SQLException {
+        if (isDummy)
+            throw new SQLException("The shard is in dummy mode.");
+
         synchronized (connectionLock) {
             connections.setAutoCommit(false);
             connections.commit();
@@ -142,6 +177,9 @@ public class MysqlStore {
     }
 
     public int size() throws SQLException {
+        if (isDummy)
+            throw new SQLException("The shard is in dummy mode.");
+
         synchronized (connectionLock) {
             ResultSet res = connections.createStatement().executeQuery("SELECT size();");
             res.next();
@@ -150,6 +188,9 @@ public class MysqlStore {
     }
 
     public int approximatedSize() throws SQLException {
+        if (isDummy)
+            throw new SQLException("The shard is in dummy mode.");
+
         synchronized (connectionLock) {
             ResultSet res = connections.createStatement().executeQuery("SELECT approx_size();");
             res.next();
